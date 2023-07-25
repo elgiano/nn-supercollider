@@ -69,7 +69,7 @@ NN {
 	}
 
 	*describeAll { this.models.do(_.describe) }
-	
+
 	*dumpInfo { |outFile, server(Server.default)|
 		forkIfNeeded {
 			server.sync(bundles:[this.dumpInfoMsg(-1, outFile)])		
@@ -84,11 +84,5 @@ NN {
 	*dumpInfoMsg { |modelIdx, outFile|
 		^["/cmd", "/nn_query", modelIdx ? -1, outFile ? ""]
 	}
-	// *setMsg { |modelIdx, attrIdx, value|
-	// 	^["/cmd", "/nn_set", modelIdx, attrIdx, value.asString]
-	// }
-	// *warmupMsg { |modelId, methodId(-1)|
-	// 	^["/cmd", "/nn_warmup", modelId, methodId]
-	// }
 
 }

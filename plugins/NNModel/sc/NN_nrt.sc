@@ -50,7 +50,7 @@ NNNRTEnv {
 
 + NNModel {
 
-	nrtResynth { |bufPath, dstPath, blockSize=0|
+	nrtResynth { |bufPath, dstPath, bufferSize=0|
 		var startTime = Date.getDate.rawSeconds;
 		var sampleRate, nch, duration;
 		SoundFile.use(bufPath) { |sf|
@@ -63,11 +63,11 @@ NNNRTEnv {
 			[0.0, this.loadMsg],
 			[0.0, ["/d_recv", SynthDef(\resynth) { |out=0|
 				Out.ar(out, SoundIn.ar((0..nch)).collect { |ch|
-					this.method(\forward).ar(ch, bufferSize: blockSize)
+					this.method(\forward).ar(ch, bufferSize: bufferSize)
 				})
 				}.asBytes]],
 			[0.0, Synth.basicNew(\resynth).newMsg],
-			[duration + (blockSize / sampleRate)]
+			[duration + (bufferSize / sampleRate)]
 			]).recordNRT(
 		inputFilePath: bufPath,
 				outputFilePath: dstPath,
