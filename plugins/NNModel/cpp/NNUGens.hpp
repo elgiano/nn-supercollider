@@ -65,7 +65,7 @@ class NN {
 public:
   NN(World* world, const NNModelDesc* modelDesc, const NNModelMethod* modelMethod,
      float* inModel, float* outModel,  RingBuf* m_inBuffer, RingBuf* m_outBuffer,
-     int bufferSize, int m_debug);
+     int bufferSize, int m_debug, int batches);
 
   ~NN();
 
@@ -82,6 +82,7 @@ public:
   std::binary_semaphore m_data_available_lock, m_result_available_lock;
   int m_inDim, m_outDim;
   int m_bufferSize, m_debug;
+  int m_batches;
   std::vector<NNSetAttr> m_attributes;
   Backend m_model;
   bool m_should_stop_perform_thread;
@@ -102,7 +103,7 @@ public:
   NN* m_sharedData;
 
 private:
-  enum UGenInputs { modelIdx=0, methodIdx, bufSize, warmup, debug, inputs };
+  enum UGenInputs { modelIdx=0, methodIdx, bufSize, warmup, debug, n_batches, inputs };
   void clearOutputs(int nSamples);
   bool allocBuffers();
   void updateAttributes();
@@ -113,6 +114,7 @@ private:
   float* m_outModel;
   int m_inDim, m_outDim;
   int m_bufferSize, m_debug;
+  int m_batches;
   bool m_useThread;
 };
 
