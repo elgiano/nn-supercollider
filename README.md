@@ -141,11 +141,30 @@ Like nn_tilde, nn.ar uses an internal circular buffer and runs neural network pr
 ```
 
 ### Multichannel
-Not implemented yet, use multichannel expansion for now:
+When supplying multiple inputs, NN.ar will process them using the same model, with batch processing.
 ```supercollider
-// resynthesizes three sine waves, each with a separate copy of the model
-{ NN(\ravePerc, \forward).ar(SinOsc.ar([100,200,300])) }
+// resynthesize three sine waves using three separate copies of the same model:
+{ SinOsc.ar([100,200,300]).collect { |in| NN(\ravePerc, \forward).ar(in) } }.play
+
+// with multi-channel: use a single model to resynthesize three inputs at the same time: 
+{ NN(\ravePerc, \forward).ar(SinOsc.ar([100,200,300])) }.play
+
+// example 2: pseudo-stereo: 
+// - add 2 different noise vectors to the same latents
+// - decode 2 slightly different channels, using a single model
+{
+    var latents = NN(\ravePerc, \encode).ar(SoundIn.ar);
+    // latent size is 8
+    var noiseVectors = 2.collect { LFNoise1.ar(1).range(-0.1, 0.1)}!latents.size }; 
+    // noiseVectors shape is [2, 8]
+    var modLatents = noiseVectors.collect { |noise| latents + noise };
+    // modLatents shape is [2, 8]
+    var out = NN(\ravePerc, \decode).ar(modLatents)
+    // out shape is [2]
+    out
+}.play
 ```
+Note that attributes don't cause multichannel expansion, precisely because we are loading a single model, that can only have one set of attributes.
 
 ## Building from source
 If you compile SuperCollider from source, or if you want to enable optimizations specific to your machine, you need to build this extension yourself.

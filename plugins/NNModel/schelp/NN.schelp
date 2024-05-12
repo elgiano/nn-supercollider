@@ -43,7 +43,9 @@ Each NN().ar UGen is specific to a loaded model and method. This is because
 different models and methods require different numbers of inputs and outputs.
 Each UGen loads an independent instance of the model, to make sure independent
 inferences on the same model don't interfere with each other. For this reason,
-setting attributes is supported only at the UGen level.
+setting attributes is supported only at the UGen level. For processing multiple
+inputs at the same time using only one instance of a model, see section
+link::#Multi-channel::.
 
 subsection::Attributes
 Torchscript can support settable attributes:
@@ -64,6 +66,37 @@ NN(\modelName, \methodName).ar(inputs, attributes: [
 ::
 With code::debug: 1::, NNUGen will print the attribute value every time it's
 set. The printed value is read from the model for every print.
+
+subsection::Multi-channel
+When supplying multiple inputs, NN.ar will process them using the same model,
+with batch processing. This is different from SuperCollider multi-channel
+expansion, where multiple inputs produce multiple UGens. NN.ar prefers to load a
+single UGen, and thus a single model, that can process all inputs in parallel,
+thus reducing computational cost.
+code::
+// example 1: resynthesize three sine waves
+// without multi-channel: three separate copies of the same model (expensive)
+{ SinOsc.ar([100,200,300]).collect { |in| NN(\ravePerc, \forward).ar(in) } }.play
+// with multi-channel: use only one model (cheaper)
+{ NN(\ravePerc, \forward).ar(SinOsc.ar([100,200,300])) }.play
+
+// example 2: pseudo-stereo: 
+// - add 2 different noise vectors to the same latents
+// - decode 2 slightly different channels, using a single model
+{
+    var latents = NN(\ravePerc, \encode).ar(SoundIn.ar);
+    // latent size is 8
+    var noiseVectors = 2.collect { LFNoise1.ar(1).range(-0.1, 0.1)!latents.size }; 
+    // noiseVectors shape is [2, 8]
+    var modLatents = noiseVectors.collect { |noise| latents + noise };
+    // modLatents shape is [2, 8]
+    var out = NN(\ravePerc, \decode).ar(modLatents);
+    // out shape is [2]
+    out
+}.play
+::
+Note that link::#Attributes:: don't cause multichannel expansion, precisely because we are loading a single model, that can only have one set of attributes.
+
 
 subsection::NRT processing
 In order to load and play with models on an NRT server, models' informations
