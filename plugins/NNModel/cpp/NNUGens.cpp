@@ -13,6 +13,12 @@ InterfaceTable* ft;
 // global model store, by numeric id
 NN::NNModelDescLib gModels;
 
+/* #define DEBUG */
+#ifdef DEBUG
+#define Debug(...) Print(__VA_ARGS__)
+#else
+#define Debug(...)
+#endif
 
 template<class T>
 T* rtAlloc(World* world, size_t size=1) {
@@ -143,11 +149,11 @@ void model_perform_loop(NN *nn_instance, int warmup) {
                                    nn_instance->m_bufferSize,
                                    nn_instance->m_method->name, nn_instance->m_batches);
         /* timer.print("model perform:"); */
+      nn_instance->m_result_available_lock.release();
     }
-    nn_instance->m_result_available_lock.release();
   }
   model_perform_cleanup(nn_instance);
-  /* Print("thread exit\n"); */
+  Debug("NN: thread exit\n");
 }
 
 void NNUGen::next(int nSamples) {
@@ -177,7 +183,7 @@ void NNUGen::next(int nSamples) {
 
       model_perform(m_sharedData);
 
-      for (int c(0); c < m_outDim * m_batches; ++c)
+      for (int c(0); c < numOutputs; ++c)
         m_outBuffer[c].put(&m_outModel[c * m_bufferSize], m_bufferSize);
     } else if (m_sharedData->m_result_available_lock.try_acquire()) {
       /* Print("sending\n"); m_sharedData->timer.reset(); */
@@ -235,6 +241,7 @@ NNUGen::NNUGen():
   m_batches = sc_max(1, static_cast<int>(in0(UGenInputs::n_batches)));
 
   m_bufferSize = in0(UGenInputs::bufSize);
+  Debug("NNUGen: bufSize %d\n", m_bufferSize); 
 
   // don't use external thread on NRT
   m_useThread = mWorld->mRealTime;
@@ -275,31 +282,35 @@ NNUGen::NNUGen():
     freeBuffers();
     ClearUnitOnMemFailed;
   }
+  Debug("NNUGen: init sharedData\n");
   m_sharedData = new(data) NN(mWorld, modelDesc, modelMethod, 
                         m_inModel, m_outModel, m_inBuffer, m_outBuffer,
                         m_bufferSize, m_debug, m_batches);
 
+  Debug("NNUGen: use thread %d\n", m_useThread);
   int warmup = static_cast<int>(in0(UGenInputs::warmup));
   if (m_useThread)
     m_sharedData->m_compute_thread = new std::thread(model_perform_loop, m_sharedData, warmup);
   else
     model_perform_load(m_sharedData, warmup);
 
+  Debug("NNUGen: setupAttributes\n", m_useThread);
   setupAttributes();
 
   mCalcFunc = make_calc_function<NNUGen, &NNUGen::next>();
-  /* Print("NN: Ctor done\n"); */
+  if (m_debug >= Debug::all)
+  Debug("NNUGen: Ctor done\n");
 }
 
 NNUGen::~NNUGen() {
-  /* Print("NN: Dtor\n"); */
+  Debug("NN: Dtor\n");
   if (m_sharedData->m_compute_thread) {
     // don't wait for join, it would stall the dsp chain
     // thread frees resources when stopped
     m_sharedData->m_should_stop_perform_thread = true;
     /* m_compute_thread->join(); */
   } else {
-    /* Print("freeing manually\n"); */
+    Debug("NN: freeing manually\n");
     m_sharedData->~NN(); // this frees resources
     RTFree(mWorld, m_sharedData);
   }

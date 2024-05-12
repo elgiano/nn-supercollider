@@ -19,7 +19,7 @@ NNUGen : MultiOutUGen {
 }
 
 +NNModelMethod {
-	ar { |inputs, bufferSize=0, warmup=0, debug=0, attributes(#[])|
+	ar { |inputs, bufferSize=(-1), warmup=0, debug=0, attributes(#[])|
 		var attrParams, nBatches, outputs;
 		inputs = inputs.asArray;
 
