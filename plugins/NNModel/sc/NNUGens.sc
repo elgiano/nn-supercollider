@@ -47,14 +47,11 @@ NNUGen : MultiOutUGen {
 		};
 
 		outputs = NNUGen.ar(model.idx, idx, bufferSize, this.numOutputs, warmup, debug, nBatches, inputs ++ attrParams);
-		// ugen outputs interlaced batched outputs: unlace
-		// e.g. a0, b0, a1, b1 ... -> unlace to [[a0,a1], [b0,b1]]
-		if (nBatches > 1) {
-			outputs = outputs.unlace(nBatches);
-			if (this.numOutputs == 1) {
-				// flat [[a0], [b0]] to [a0, b0]
-				outputs = outputs.flatten;
-			}
+		// ugen outputs is not interlaced batches: clump
+		// e.g. [a0, a1, b0, b1] -> clump to [[a0,a1], [b0,b1]]
+		// note that if numOutputs is 1 [a0,b0] doesn't need to be clumped
+		if (nBatches > 1 && {this.numOutputs > 1}) {
+			outputs = outputs.clump(this.numOutputs);
 		};
 		^outputs
 	}

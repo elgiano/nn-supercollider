@@ -188,7 +188,7 @@ Then, use CMake to configure:
 
 Libtorch is found automatically if installed system-wise. If you followed the official install instruction for libtorch (link above), you need to add it to CMAKE_PREFIX_PATH:
 
-    cmake .. -DCMAKE_PREFIX_PAH=/path/to/libtorch/
+    cmake .. -DCMAKE_PREFIX_PATH=/path/to/libtorch/
 
 It's expected that the SuperCollider repo is cloned at `../supercollider` relative to this repo. If
 it's not: add the option `-DSC_PATH=/path/to/sc/source`.
