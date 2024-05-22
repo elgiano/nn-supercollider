@@ -179,40 +179,30 @@ Clone the project:
 
     git clone https://github.com/elgiano/nn-supercollider
     cd nn-supercollider
-    mkdir build
-    cd build
 
 Then, use CMake to configure:
 
-    cmake .. -DCMAKE_BUILD_TYPE=Release
+    cmake -B build -DCMAKE_BUILD_TYPE=Release \
+        -DTORCH_PATH=/path/to/libtorch/ \
+        -DSC_PATH=/path/to/sc/source/ \
+        -DCMAKE_INSTALL_PREFIX=/path/to/sc/extensions/ \
+        -DNATIVE=ON
 
-Libtorch is found automatically if installed system-wise. If you followed the official install instruction for libtorch (link above), you need to add it to CMAKE_PREFIX_PATH:
-
-    cmake .. -DCMAKE_PREFIX_PATH=/path/to/libtorch/
-
-It's expected that the SuperCollider repo is cloned at `../supercollider` relative to this repo. If
-it's not: add the option `-DSC_PATH=/path/to/sc/source`.
-
-    cmake .. -DSC_PATH=/path/to/sc/source
-
-You may want to manually specify the install location in the first step to point it at your
-SuperCollider extensions directory: add the option `-DCMAKE_INSTALL_PREFIX=/path/to/extensions`.
-Note that you can retrieve the Extension path from sclang with `Platform.userExtensionDir`
-
-    cmake .. -DCMAKE_INSTALL_PREFIX=/path/to/extensions
-
-To enable platform-specific optimizations:
-
-    cmake .. -DNATIVE=ON
+Options:
+- `-DTORCH_PATH`: libtorch is *not* found automatically if installed system-wise. At the moment the only supported way of building nn.ar is to download a libtorch release (see link above), unzip it and pass its path to cmake using `-DTORCH_PATH`
+- `-DSC_PATH`: path to SuperCollider source (if you don't have it, you can get it by `git clone https://github.com/supercollider/supercollider`).
+- `-DCMAKE_INSTALL_PREFIX`: you may want to manually specify the install location to point directly at your
+SuperCollider extensions directory. Note that you can retrieve the Extension path from sclang with `Platform.userExtensionDir`
+- `-DNATIVE`: optional, enable platform-specific optimizations:
 
 Finally, use CMake to build the project:
 
-    cmake --build . --config Release
-    cmake --build . --config Release --target install
+    cmake --build build --config Release
+    cmake --build build --config Release --target install
 
 > **Note: for building with any supercollider version earlier than 3.13**: nn.ar needs a macro called `ClearUnitOnMemFailed`, which was defined in supercollider starting from version 3.13. If for any reason you need to build nn.ar with a previous version of supercollider, you have to copy [these two macros](https://github.com/supercollider/supercollider/blob/a80436ac2cb22b8cef62192c86be2951639c184f/include/plugin_interface/SC_Unit.h#L83-L92) and put them in `NNModel.cpp`.
 
-### Developing
+### Note for sc-plugin development
 
 The usual `regenerate` command was disabled because `CmakeLists.txt` needed to be manually edited to include libtorch.
 

@@ -56,40 +56,57 @@ option(SCSYNTH "Build plugins for scsynth" ON)
 option(NATIVE "Optimize for native architecture" OFF)
 option(STRICT "Use strict warning flags" OFF)
 option(NOVA_SIMD "Build plugins with nova-simd support." ON)
+set(TORCH_PATH "" CACHE STRING "Path to libtorch")
+
 ####################################################################################################
 # include libraries
-
 if (NOVA_SIMD)
 	add_definitions(-DNOVA_SIMD)
 	include_directories(${SC_PATH}/external_libraries/nova-simd)
 endif()
 
-find_package(Torch REQUIRED) # find torch
+# find torch
+message(STATUS "Torch install path: ${TORCH_PATH}")
+if ("${TORCH_PATH}" STREQUAL "")
+    message(FATAL_ERROR "TORCH_PATH required but not provided")
+endif()
+if (NOT EXISTS ${TORCH_PATH})
+    message(FATAL_ERROR "TORCH_PATH '${TORCH_PATH}' does not exist")
+endif()
+
+find_package(Torch REQUIRED PATHS "${TORCH_PATH}" NO_DEFAULT_PATH)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
-find_library(CUSTOM_TORCH NAMES torch PATHS "${CMAKE_PREFIX_PATH}")
-if (CUSTOM_TORCH)
-  set(TORCH_SO "")
-  if (LINUX)
-    file(GLOB TORCH_SO
-      "${TORCH_INSTALL_PREFIX}/lib/libtorch.*"
-      "${TORCH_INSTALL_PREFIX}/lib/libtorch_cpu.*"
-      "${TORCH_INSTALL_PREFIX}/lib/libgomp*"
-      "${TORCH_INSTALL_PREFIX}/lib/libc10*"
-      )
+# copy shared libs
+set(TORCH_SO ${TORCH_LIBRARY} ${c10_LIBRARY})
+if (LINUX)
+    file(GLOB GLOB_TORCH_SO
+	"${TORCH_INSTALL_PREFIX}/lib/libtorch_cpu.*"
+	"${TORCH_INSTALL_PREFIX}/lib/libgomp*"
+    )
+    list(APPEND TORCH_SO ${GLOB_TORCH_SO})
     set(CMAKE_INSTALL_RPATH "$ORIGIN/ignore")
-  elseif (APPLE)
-    file(GLOB TORCH_SO "${TORCH_INSTALL_PREFIX}/lib/*.dylib")
+elseif (APPLE)
+    file(GLOB GLOB_TORCH_SO
+	"${TORCH_INSTALL_PREFIX}/lib/libtorch_cpu.*"
+    )
+    # file(GLOB TORCH_SO "${TORCH_INSTALL_PREFIX}/lib/*.dylib")
+    list(APPEND TORCH_SO ${GLOB_TORCH_SO})
     set(CMAKE_INSTALL_RPATH "@loader_path/ignore")
-  elseif (MSVC)
-    file(GLOB TORCH_SO "${TORCH_INSTALL_PREFIX}/lib/*.dll")
-  endif()
-
-  if (TORCH_SO)
-    message("> FOUND custom Torch, libraries will be copied: " "${TORCH_SO}")
-    install(FILES ${TORCH_SO} DESTINATION "${dest_dir}/ignore")
-  endif()
+elseif (MSVC)
+    file(GLOB GLOB_TORCH_SO
+	"${TORCH_INSTALL_PREFIX}/lib/torch_cpu.dll"
+	# "${TORCH_INSTALL_PREFIX}/lib/libiomp5md.dll"
+    )
+#     file(GLOB TORCH_SO "${TORCH_INSTALL_PREFIX}/lib/*.dll")
 endif()
+install(FILES ${TORCH_SO} DESTINATION "${dest_dir}/ignore")
+
+message(STATUS "Torch libs: ${TORCH_LIBRARIES}")
+message(STATUS "Torch shared libraries to be copied:")
+foreach(so ${TORCH_SO})
+    message(STATUS "> ${so}")
+endforeach()
 
 ####################################################################################################
 # Begin target NNUGens

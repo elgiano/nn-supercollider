@@ -22,11 +22,12 @@ jobs:
 
           - name: 'macOS-x64'
             os: macos-12
-            torch: https://download.pytorch.org/libtorch/cpu/libtorch-macos-2.0.1.zip
+            torch: https://download.pytorch.org/libtorch/cpu/libtorch-macos-2.1.0.zip
 
           - name: 'macOS-arm64'
             arch: arm64
             os: macos-12
+            torch: https://download.pytorch.org/libtorch/cpu/libtorch-macos-arm64-2.3.0.zip
 
     env:
       SC_PATH: ${{ github.workspace }}/supercollider
@@ -49,16 +50,10 @@ jobs:
 
       # Get libtorch
     - name: Download libtorch (Unix)
-      if: runner.os != 'Windows' && matrix.arch != 'arm64'
+      if: runner.os != 'Windows'
       run: |
         wget ${{ matrix.torch }} -O libtorch.zip
         unzip libtorch.zip
-
-    - name: Download libtorch (MacOS arm64)
-      if: matrix.arch == 'arm64'
-      run: |
-        curl -L https://anaconda.org/pytorch/pytorch/2.0.0/download/osx-arm64/pytorch-2.0.0-py3.10_0.tar.bz2 | tar -xj
-        mv lib/python3.10/site-packages/torch "$TORCH_PATH"
 
     - name: Download libtorch (Windows)
       if: runner.os == 'Windows'
@@ -75,14 +70,14 @@ jobs:
     - name: Configure CMake
       shell: bash
       working-directory: ${{ env.BUILD_PATH }}
-      run: cmake .. -DCMAKE_BUILD_TYPE='Release' -DSC_PATH="$SC_PATH" -DCMAKE_INSTALL_PREFIX="$INSTALL_PATH" -DCMAKE_PREFIX_PATH="$TORCH_PATH"
+      run: cmake .. -DCMAKE_BUILD_TYPE=Release -DSC_PATH="$SC_PATH" -DCMAKE_INSTALL_PREFIX="$INSTALL_PATH" -DTORCH_PATH="$TORCH_PATH"
 
     - name: Build
       shell: bash
       working-directory: ${{ env.BUILD_PATH }}
       env:
         CMAKE_BUILD_PARALLEL_LEVEL: 4
-      run: cmake --build . --config "Release" --target install
+      run: cmake --build . --config Release --target install
 
       # Gather all files in a zip
     - name: Zip up build (Unix)
