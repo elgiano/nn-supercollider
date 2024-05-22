@@ -175,44 +175,48 @@ Build requirements:
 - [libtorch](https://pytorch.org/cppdocs/installing.html)
 - SuperCollider source code: **at least version 3.13** (see the note below if you need to build with an earlier sc version)
 
-Clone the project:
+If you don't have a copy of supercollider's source code, you can get one by:
 
-    git clone https://github.com/elgiano/nn-supercollider
+    git clone https://github.com/supercollider/supercollider
+
+### Clone the project:
+
+    git clone https://github.com/elgiano/nn.ar
     cd nn-supercollider
-    mkdir build
-    cd build
 
-Then, use CMake to configure:
+### Download libtorch
 
-    cmake .. -DCMAKE_BUILD_TYPE=Release
+We have built nn.ar releases with the following versions of libtorch:
 
-Libtorch is found automatically if installed system-wise. If you followed the official install instruction for libtorch (link above), you need to add it to CMAKE_PREFIX_PATH:
+- linux: [download v2.3.0 from pytorch.org](https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.3.0%2Bcpu.zip)  
+- macos arm64: [download v2.3.0 from PyPI](https://files.pythonhosted.org/packages/55/51/4bdee83e6fa9cca8e3a6cdf81a2695ede9d3fd7148e4fd4188dff142d7b0/torch-2.3.0-cp312-none-macosx_11_0_arm64.whl). You'll need to unzip the `.whl` file and take only the folder called "torch".
+- macos x64: [download v2.1.0 from pytorch.org](https://download.pytorch.org/libtorch/cpu/libtorch-macos-2.1.0.zip)
+- windows: [download v2.2.0 from pytorch.org](https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.2.0%2Bcpu.zip)
 
-    cmake .. -DCMAKE_PREFIX_PATH=/path/to/libtorch/
+Because of difficulties with torch CMake files and discrepancies in how different systems install libtorch, we don't recommend using system-wide installed libtorch. However, if you'd need to do it, you can enable finding and linking against system-installed torch with `-DSYSTEM_TORCH=ON`.
 
-It's expected that the SuperCollider repo is cloned at `../supercollider` relative to this repo. If
-it's not: add the option `-DSC_PATH=/path/to/sc/source`.
+### Configure and build
 
-    cmake .. -DSC_PATH=/path/to/sc/source
+    cmake -B build -DCMAKE_BUILD_TYPE=Release \
+        -DTORCH_PATH=/path/to/libtorch/ \
+        -DSC_PATH=/path/to/sc/source/ \
+        -DCMAKE_INSTALL_PREFIX=/path/to/sc/extensions/ \
+        -DNATIVE=ON
 
-You may want to manually specify the install location in the first step to point it at your
-SuperCollider extensions directory: add the option `-DCMAKE_INSTALL_PREFIX=/path/to/extensions`.
-Note that you can retrieve the Extension path from sclang with `Platform.userExtensionDir`
+Options:
+- **-DTORCH_PATH**: at the moment the recommended way of building nn.ar is to download a libtorch release (see above), unzip it and pass its path to cmake using `-DTORCH_PATH`. Systemwide installed torch will *not* be found automatically by default.
+- **-DSC_PATH**: path to SuperCollider source.
+- **-DCMAKE_INSTALL_PREFIX**: you may want to manually specify the install location to point directly at your
+SuperCollider extensions directory. Note that you can retrieve the Extension path from sclang with `Platform.userExtensionDir`
+- **-DNATIVE**: optional, enable platform-specific optimizations.
 
-    cmake .. -DCMAKE_INSTALL_PREFIX=/path/to/extensions
+Finally, use CMake to build and install the project:
 
-To enable platform-specific optimizations:
-
-    cmake .. -DNATIVE=ON
-
-Finally, use CMake to build the project:
-
-    cmake --build . --config Release
-    cmake --build . --config Release --target install
+    cmake --build build --config Release --target install
 
 > **Note: for building with any supercollider version earlier than 3.13**: nn.ar needs a macro called `ClearUnitOnMemFailed`, which was defined in supercollider starting from version 3.13. If for any reason you need to build nn.ar with a previous version of supercollider, you have to copy [these two macros](https://github.com/supercollider/supercollider/blob/a80436ac2cb22b8cef62192c86be2951639c184f/include/plugin_interface/SC_Unit.h#L83-L92) and put them in `NNModel.cpp`.
 
-### Developing
+### Note for sc-plugin development
 
 The usual `regenerate` command was disabled because `CmakeLists.txt` needed to be manually edited to include libtorch.
 

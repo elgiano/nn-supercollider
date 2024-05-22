@@ -2,7 +2,12 @@ on:
   push:
     tags:
       - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
-
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name'
+        required: false
+        default: 'manual_run'
 jobs:
   build:
 
@@ -14,19 +19,25 @@ jobs:
 
           - name: 'Linux-x64'
             os: ubuntu-latest
-            torch: https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.0.1%2Bcpu.zip
+            torch: https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.3.0%2Bcpu.zip
 
           - name: 'Windows-x64'
             os: windows-latest
-            torch: https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.0.1%2Bcpu.zip
+            torch: https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.2.0%2Bcpu.zip
 
           - name: 'macOS-x64'
             os: macos-12
-            torch: https://download.pytorch.org/libtorch/cpu/libtorch-macos-2.0.1.zip
+            torch: https://download.pytorch.org/libtorch/cpu/libtorch-macos-2.1.0.zip
 
-          - name: 'macOS-arm64'
+          - name: 'macOS-12-arm64'
             arch: arm64
             os: macos-12
+            torch: https://files.pythonhosted.org/packages/55/51/4bdee83e6fa9cca8e3a6cdf81a2695ede9d3fd7148e4fd4188dff142d7b0/torch-2.3.0-cp312-none-macosx_11_0_arm64.whl
+            
+          - name: 'macOS-latest-arm64'
+            arch: arm64
+            os: macos-latest
+            torch: https://files.pythonhosted.org/packages/55/51/4bdee83e6fa9cca8e3a6cdf81a2695ede9d3fd7148e4fd4188dff142d7b0/torch-2.3.0-cp312-none-macosx_11_0_arm64.whl
 
     env:
       SC_PATH: ${{ github.workspace }}/supercollider
@@ -57,8 +68,9 @@ jobs:
     - name: Download libtorch (MacOS arm64)
       if: matrix.arch == 'arm64'
       run: |
-        curl -L https://anaconda.org/pytorch/pytorch/2.0.0/download/osx-arm64/pytorch-2.0.0-py3.10_0.tar.bz2 | tar -xj
-        mv lib/python3.10/site-packages/torch "$TORCH_PATH"
+        wget ${{ matrix.torch }} -O libtorch.whl
+        unzip libtorch.whl "torch/*"
+        mv torch libtorch
 
     - name: Download libtorch (Windows)
       if: runner.os == 'Windows'
@@ -75,14 +87,14 @@ jobs:
     - name: Configure CMake
       shell: bash
       working-directory: ${{ env.BUILD_PATH }}
-      run: cmake .. -DCMAKE_BUILD_TYPE='Release' -DSC_PATH="$SC_PATH" -DCMAKE_INSTALL_PREFIX="$INSTALL_PATH" -DCMAKE_PREFIX_PATH="$TORCH_PATH"
+      run: cmake .. -DCMAKE_BUILD_TYPE=Release -DSC_PATH="$SC_PATH" -DCMAKE_INSTALL_PREFIX="$INSTALL_PATH" -DTORCH_PATH="$TORCH_PATH"
 
     - name: Build
       shell: bash
       working-directory: ${{ env.BUILD_PATH }}
       env:
         CMAKE_BUILD_PARALLEL_LEVEL: 4
-      run: cmake --build . --config "Release" --target install
+      run: cmake --build . --config Release --target install
 
       # Gather all files in a zip
     - name: Zip up build (Unix)
@@ -99,6 +111,7 @@ jobs:
 
       # Upload
     - name: Upload binaries to release
+      if: github.event_name == 'push'
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -106,3 +119,14 @@ jobs:
         prerelease: true
         body: ""
         tag: ${{ github.ref }}
+
+      # Upload: manual trigger
+    - name: Upload binaries to release
+      if: github.event_name == 'workflow_dispatch'
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: ${{ env.INSTALL_PATH }}/${{ env.ARCHIVE_NAME }}
+        prerelease: true
+        body: ""
+        tag: ${{github.event.inputs.tag_name}}
