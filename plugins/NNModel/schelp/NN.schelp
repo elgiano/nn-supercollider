@@ -292,6 +292,23 @@ code::nil:: which disables writing to a file (useful for NRT servers since they
 can't write to files) and prints to console instead.
 
 
+section::Windows utility methods
+These method are useful for Windows installations only.
+
+method::copyDLLs
+Copies all .dll files from NN's teletype::ignore:: folder to
+link::Classes/Platform#*resourceDir::
+
+method::deleteDLLs
+Removes all .dll files listed in NN's teletype::ignore:: folder from
+link::Classes/Platform#*resourceDir::
+
+section::macOS utility methods
+
+method::deQuarantine
+Opens a terminal and runs teletype::xattr -d -r com.apple.quarantine:: for NN Extension path
+
+
 examples::
 
 code::

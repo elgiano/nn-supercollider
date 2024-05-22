@@ -32,6 +32,12 @@ Failing to do so can produce errors like:
 2. Find the folder where you have `scsynth.exe`, it's usually something like: `C:\Program Files\SuperCollider3.x.x\` (where 3.x.x is the version you have installed).
 3. Paste all the .dll files you got in step 1 to the folder where `scsynth.exe` is.
 
+Alternatively, you can use `NN.copyDLLs`, but you might have to run SuperCollider as Administrator:
+```
+s.quit; // server needs to be off for this to work
+NN.copyDLLs
+```
+
 ## Usage
 
 ### Pre-trained models

@@ -129,6 +129,7 @@ set(NNUGens_sc_files
     plugins/NNModel/sc/NN_nrt.sc
     plugins/NNModel/sc/NNModel.sc
     plugins/NNModel/sc/NNUGens.sc
+    plugins/NNModel/sc/platformUtils.sc
 )
 set(NNUGens_schelp_files
     plugins/NNModel/schelp/NNModel.schelp
