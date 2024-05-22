@@ -1,5 +1,8 @@
 # CHANGELOG
 
+### v0.0.6-alpha
+- Fixed a bug with multi-channel output, affecting \encode methods: unlacing was not needed
+
 ### v0.0.5-alpha
 - Multichannel batch processing: multiple inputs will be processed *by the same model* as parallel batches
 - only scsynth checks if a model is already loaded before (re-)loading it
