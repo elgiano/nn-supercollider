@@ -2,7 +2,12 @@ on:
   push:
     tags:
       - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
-
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name'
+        required: false
+        default: 'manual_run'
 jobs:
   build:
 
@@ -14,11 +19,11 @@ jobs:
 
           - name: 'Linux-x64'
             os: ubuntu-latest
-            torch: https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.0.1%2Bcpu.zip
+            torch: https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.3.0%2Bcpu.zip
 
           - name: 'Windows-x64'
             os: windows-latest
-            torch: https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.0.1%2Bcpu.zip
+            torch: https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.3.0%2Bcpu.zip
 
           - name: 'macOS-x64'
             os: macos-12
@@ -27,7 +32,7 @@ jobs:
           - name: 'macOS-arm64'
             arch: arm64
             os: macos-12
-            torch: https://download.pytorch.org/libtorch/cpu/libtorch-macos-arm64-2.3.0.zip
+            torch: https://files.pythonhosted.org/packages/55/51/4bdee83e6fa9cca8e3a6cdf81a2695ede9d3fd7148e4fd4188dff142d7b0/torch-2.3.0-cp312-none-macosx_11_0_arm64.whl
 
     env:
       SC_PATH: ${{ github.workspace }}/supercollider
@@ -50,10 +55,17 @@ jobs:
 
       # Get libtorch
     - name: Download libtorch (Unix)
-      if: runner.os != 'Windows'
+      if: runner.os != 'Windows' && matrix.arch != 'arm64'
       run: |
         wget ${{ matrix.torch }} -O libtorch.zip
         unzip libtorch.zip
+
+    - name: Download libtorch (MacOS arm64)
+      if: matrix.arch == 'arm64'
+      run: |
+        wget ${{ matrix.torch }} -O libtorch.whl
+        unzip libtorch.whl "torch/*"
+        mv torch libtorch
 
     - name: Download libtorch (Windows)
       if: runner.os == 'Windows'
@@ -94,6 +106,7 @@ jobs:
 
       # Upload
     - name: Upload binaries to release
+      if: github.event_name == 'push'
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -101,3 +114,14 @@ jobs:
         prerelease: true
         body: ""
         tag: ${{ github.ref }}
+
+      # Upload: manual trigger
+    - name: Upload binaries to release
+      if: github.event_name == 'workflow_dispatch'
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: ${{ env.INSTALL_PATH }}/${{ env.ARCHIVE_NAME }}
+        prerelease: true
+        body: ""
+        tag: ${{github.event.inputs.tag_name}}

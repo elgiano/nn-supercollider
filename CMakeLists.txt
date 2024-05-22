@@ -56,6 +56,7 @@ option(SCSYNTH "Build plugins for scsynth" ON)
 option(NATIVE "Optimize for native architecture" OFF)
 option(STRICT "Use strict warning flags" OFF)
 option(NOVA_SIMD "Build plugins with nova-simd support." ON)
+option(SYSTEM_TORCH "Use system-installed torch (and don't copy shared libraries)" OFF)
 set(TORCH_PATH "" CACHE STRING "Path to libtorch")
 
 ####################################################################################################
@@ -65,42 +66,45 @@ if (NOVA_SIMD)
 	include_directories(${SC_PATH}/external_libraries/nova-simd)
 endif()
 
+if (${SYSTEM_TORCH})
+    find_package(Torch REQUIRED)
+else()
 # find torch
-message(STATUS "Torch install path: ${TORCH_PATH}")
-if ("${TORCH_PATH}" STREQUAL "")
-    message(FATAL_ERROR "TORCH_PATH required but not provided")
-endif()
-if (NOT EXISTS ${TORCH_PATH})
-    message(FATAL_ERROR "TORCH_PATH '${TORCH_PATH}' does not exist")
-endif()
+    message(STATUS "Torch install path: ${TORCH_PATH}")
+    if ("${TORCH_PATH}" STREQUAL "")
+	message(FATAL_ERROR "TORCH_PATH required but not provided")
+    endif()
+    if (NOT EXISTS ${TORCH_PATH})
+	message(FATAL_ERROR "TORCH_PATH '${TORCH_PATH}' does not exist")
+    endif()
 
-find_package(Torch REQUIRED PATHS "${TORCH_PATH}" NO_DEFAULT_PATH)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+    find_package(Torch REQUIRED PATHS "${TORCH_PATH}" NO_DEFAULT_PATH)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 # copy shared libs
-set(TORCH_SO ${TORCH_LIBRARY} ${c10_LIBRARY})
-if (LINUX)
-    file(GLOB GLOB_TORCH_SO
-	"${TORCH_INSTALL_PREFIX}/lib/libtorch_cpu.*"
-	"${TORCH_INSTALL_PREFIX}/lib/libgomp*"
-    )
-    list(APPEND TORCH_SO ${GLOB_TORCH_SO})
-    set(CMAKE_INSTALL_RPATH "$ORIGIN/ignore")
-elseif (APPLE)
-    file(GLOB GLOB_TORCH_SO
-	"${TORCH_INSTALL_PREFIX}/lib/libtorch_cpu.*"
-    )
-    # file(GLOB TORCH_SO "${TORCH_INSTALL_PREFIX}/lib/*.dylib")
-    list(APPEND TORCH_SO ${GLOB_TORCH_SO})
-    set(CMAKE_INSTALL_RPATH "@loader_path/ignore")
-elseif (MSVC)
-    file(GLOB GLOB_TORCH_SO
-	"${TORCH_INSTALL_PREFIX}/lib/torch_cpu.dll"
-	# "${TORCH_INSTALL_PREFIX}/lib/libiomp5md.dll"
-    )
-#     file(GLOB TORCH_SO "${TORCH_INSTALL_PREFIX}/lib/*.dll")
+    set(TORCH_SO ${TORCH_LIBRARY} ${c10_LIBRARY})
+    if (LINUX)
+	file(GLOB GLOB_TORCH_SO
+	    "${TORCH_INSTALL_PREFIX}/lib/libtorch_cpu.*"
+	    "${TORCH_INSTALL_PREFIX}/lib/libgomp*"
+	)
+	list(APPEND TORCH_SO ${GLOB_TORCH_SO})
+	set(CMAKE_INSTALL_RPATH "$ORIGIN/ignore")
+    elseif (APPLE)
+	file(GLOB GLOB_TORCH_SO
+	    "${TORCH_INSTALL_PREFIX}/lib/libtorch_cpu.*"
+	    "${TORCH_INSTALL_PREFIX}/lib/libomp*"
+	)
+	list(APPEND TORCH_SO ${GLOB_TORCH_SO})
+	set(CMAKE_INSTALL_RPATH "@loader_path/ignore")
+    elseif (MSVC)
+	file(GLOB GLOB_TORCH_SO
+	    "${TORCH_INSTALL_PREFIX}/lib/torch_cpu.dll"
+	    "${TORCH_INSTALL_PREFIX}/lib/libiomp5md.dll"
+	)
+    endif()
+    install(FILES ${TORCH_SO} DESTINATION "${dest_dir}/ignore")
 endif()
-install(FILES ${TORCH_SO} DESTINATION "${dest_dir}/ignore")
 
 message(STATUS "Torch libs: ${TORCH_LIBRARIES}")
 message(STATUS "Torch shared libraries to be copied:")
