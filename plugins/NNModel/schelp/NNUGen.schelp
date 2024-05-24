@@ -1,6 +1,6 @@
 class:: NN
 summary:: UGen for playing torchscripts loaded by NNModel
-related:: NNModel, NNModelMethod
+related:: Classes/NNModel, Classes/NNModelMethod
 categories:: UGens>Machine Learning
 
 description::
