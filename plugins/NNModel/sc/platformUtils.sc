@@ -38,7 +38,12 @@
 	*deQuarantine {
 		Platform.case { \osx } {	
 			var path = PathName(NN.filenameSymbol.asString.dirname).parentPath;
-			runInTerminal("xattr -d -r com.apple.quarantine" + shellQuote(path))
+			["*.scx", "ignore/*.dylib"].do { |ext| 
+				(path +/+ ext).pathMatch.do { |path|
+					var cmd = "xattr -d com.apple.quarantine" + shellQuote(path);
+					cmd.postln.unixCmd
+				}
+			}
 		} {
 			warn("You don't need to delete DLLs unless you're on macOS");
 		}
