@@ -38,12 +38,11 @@ NNModel {
 
 		model = super.newCopyArgs(server);
 
-		forkIfNeeded {
-			server.sync(bundles: [loadMsg]);
-			// server writes info file: read it
+		NN.prIfCmd(server, loadMsg) {
+			// server wrote an infoFile: read it
 			protect { 
 				model.initFromFile(infoFile);
-				action.(model)
+				action.value(model)
 			} {
 				File.delete(infoFile);
 			}
@@ -85,7 +84,7 @@ NNModel {
 		var msg = this.dumpInfoMsg(outFile);
 		this.prErrIfNoServer("dumpInfo");
 		if (server.serverRunning.not) { Error("server not running").throw };
-		forkIfNeeded { server.sync(bundles:[msg]) }
+		server.sendMsg(*msg);
 	}
 
 	describe {
@@ -99,7 +98,7 @@ NNModel {
 
 	prErrIfNoServer { |funcName|
 	if (server.isNil) {
-		Error("%: NNModel(%) is not bound to a server, can't dumpInfo. Is it a NRT model?"
+		Error("NNModel(%) is not bound to a server, can't %. Is it a NRT model?"
 			.format(funcName, this.key)).throw
 		};
 	}
@@ -111,7 +110,7 @@ NNModelInfo {
 
 	*fromFile { |infoFile|
 		if (File.exists(infoFile).not) {
-			Error("NNModelInfo: can't load info file '%'".format(infoFile)).throw;
+			Error("NNModelInfo: file '%' does not exist".format(infoFile)).throw;
 		} {
 			var yaml = File.readAllString(infoFile).parseYAML[0];
 			^super.new.initFromDict(yaml)

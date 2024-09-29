@@ -2,204 +2,185 @@
 #include "NNModel.hpp"
 #include "SC_InterfaceTable.h"
 #include "SC_PlugIn.hpp"
+#include "SC_ReplyImpl.hpp"
+#include "scsynthsend.h"
 
 extern InterfaceTable* ft;
 extern NN::NNModelDescLib gModels;
 
-inline char* copyStrToBuf(char** buf, const char* str) {
-  char* res = strcpy(*buf, str); *buf += strlen(str) + 1;
-  return res;
-}
-
 namespace NN::Cmd {
 
-// /cmd /nn_set str str str
-struct LoadCmdData {
-public:
-  int id;
-  const char* path;
-  const char* filename;
+// defining async commands is complicated because of scsynth/nova implementations
+// the common interface requires to use DefinePlugInCmd and DoAsynchronousCommand from ftTable
+// - we need to pass osc args as void* inData
+// - if we want to SendReply, we need to pass replyAddress to the actual stage function
+template<class Cmd>
+struct BaseAsyncCmd {
+  ReplyAddress* mReplyAddr;
+  sc_msg_iter* oscArgs;
 
-  static LoadCmdData* alloc(sc_msg_iter* args, World* world=nullptr) {
+  void SendFailure(const char* errString) {
+    const char* cmdName = Cmd::cmdName();
+    small_scpacket packet;
+    packet.adds("/fail");
+    packet.maketags(3);
+    packet.addtag(',');
+    packet.addtag('s');
+    packet.addtag('s');
+    packet.adds(cmdName);
+    packet.adds(errString);
 
-    int id = args->geti(-1);
+    Print("FAILURE IN SERVER: /cmd %s %s\n", cmdName, errString);
+    SendReply(mReplyAddr, packet.data(), packet.size());
+  }
+
+  BaseAsyncCmd() = delete;
+  static Cmd* alloc(sc_msg_iter* args, ReplyAddress* replyAddr, World* world=nullptr) {
+    size_t oscDataSize = args->remain();
+    size_t dataSize = sizeof(Cmd) + oscDataSize;
+    // Print("allocating data size: %d\n", dataSize);
+
+    Cmd* cmdData = (Cmd*) (world ? RTAlloc(world, dataSize) : NRTAlloc(dataSize));
+    if (cmdData == nullptr) {
+      Print("%s: msg data alloc failed.\n", Cmd::cmdName());
+      return nullptr;
+    }
+    cmdData->mReplyAddr = replyAddr;
+    cmdData->oscArgs = new (cmdData + 1) sc_msg_iter(oscDataSize, args->data + args->size - args->remain());
+
+    return cmdData;
+  }
+
+  static void nrtFree(World*, void* data) { NRTFree(data); }
+
+  static void asyncCmd(World* world, void* inUserData, sc_msg_iter* args, void* replyAddr) {
+    const char* cmdName = Cmd::cmdName();
+    // Print("nn async cmd name: %s\n", cmdName);
+    Cmd* data = Cmd::alloc(args, static_cast<ReplyAddress*>(replyAddr), nullptr);
+    if (data == nullptr) return;
+    DoAsynchronousCommand(
+      world, replyAddr, cmdName, data,
+      Cmd::stage2, // stage2 is non real time
+      Cmd::stage3, // stage3: RT (completion msg performed if true)
+      Cmd::stage4, // stage4: NRT (sends /done if true)
+      nrtFree, 0, 0);
+  }
+
+  static void define() {
+    DefinePlugInCmd(Cmd::cmdName(), Cmd::asyncCmd, nullptr);
+  }
+
+  static bool stage2(World*, void*) { return true; }
+  static bool stage3(World*, void*) { return true; }
+  static bool stage4(World*, void*) { return true; }
+};
+
+struct NNLoadCmd : BaseAsyncCmd<NNLoadCmd> {
+
+  static const char* cmdName() { return "/nn_load"; }
+
+  static bool stage2(World* world, void* inData) {
+    auto cmdData = (NNLoadCmd*) inData;
+    auto args = cmdData->oscArgs;
+    const int id = args->geti(-1);
     const char* path = args->gets();
     const char* filename = args->gets("");
 
     if (path == 0) {
-      Print("Error: nn_load needs a path to a .ts file\n");
-      return nullptr;
+      cmdData->SendFailure("needs a path to a .ts file");
+      return false;
     }
 
-    size_t dataSize = sizeof(LoadCmdData)
-      + strlen(path) + 1
-      + strlen(filename) + 1;
-
-    LoadCmdData* cmdData = (LoadCmdData*) (world ? RTAlloc(world, dataSize) : NRTAlloc(dataSize));
-    if (cmdData == nullptr) {
-      Print("nn_load: msg data alloc failed.\n");
-      return nullptr;
+    // Print("nn_load: idx %d path %s\n", id, path);
+    auto model = (id == -1) ? gModels.load(path) : gModels.load(id, path);
+    if (model == nullptr) {
+      char errMsg[256]; sprintf(errMsg, "can't load model at %s", path);
+      cmdData->SendFailure(errMsg);
+      return false;
     }
 
-    char* data = (char*) (cmdData + 1);
-    cmdData->id = id;
-    cmdData->path = copyStrToBuf(&data, path);
-    cmdData->filename = copyStrToBuf(&data, filename);
-    return cmdData;
-  }
-
-  LoadCmdData() = delete;
-};
-
-bool nn_load(World* world, void* inData) {
-  LoadCmdData* data = (LoadCmdData*)inData;
-  int id = data->id;
-  const char* path = data->path;
-  const char* filename = data->filename;
-
-  // Print("nn_load: idx %d path %s\n", id, path);
-  auto model = (id == -1) ? gModels.load(path) : gModels.load(id, path);
-
-  if (model != nullptr && strlen(filename) > 0) {
-    model->dumpInfo(filename);
-  }
-  return true;
-}
-
-
-// /cmd /nn_query str
-struct QueryCmdData {
-public:
-  int modelIdx;
-  const char* outFile;
-
-  static QueryCmdData* alloc(sc_msg_iter* args, World* world=nullptr) {
-    int modelIdx = args->geti(-1);
-    const char* outFile = args->gets("");
-
-    auto dataSize = sizeof(QueryCmdData) + strlen(outFile) + 1;
-    QueryCmdData* cmdData = (QueryCmdData*) (world ? RTAlloc(world, dataSize) : NRTAlloc(dataSize));
-    if (cmdData == nullptr) { Print("nn_query: alloc failed.\n"); return nullptr; }
-    cmdData->modelIdx = modelIdx;
-    char* data = (char*) (cmdData + 1);
-    cmdData->outFile = copyStrToBuf(&data, outFile);
-    
-    return cmdData;
-  }
-
-  QueryCmdData() = delete;
-};
-
-bool nn_query(World* world, void* inData) {
-  QueryCmdData* data = (QueryCmdData*)inData;
-  int modelIdx = data->modelIdx;
-  const char* outFile = data->outFile;
-  bool writeToFile = strlen(outFile) > 0;
-  if (modelIdx < 0) {
-    if (writeToFile) gModels.dumpAllInfo(outFile); else gModels.printAllInfo();
+    if (strlen(filename) > 0)
+      model->dumpInfo(filename);
     return true;
   }
-  const auto model = gModels.get(static_cast<unsigned short>(modelIdx), true);
-  if (model) {
-    if (writeToFile) model->dumpInfo(outFile); else model->printInfo();
-  }
-  return true;
-}
-
-
-// /nn_unload i
-struct UnloadCmdData {
-public:
-  int id;
-
-  static UnloadCmdData* alloc(sc_msg_iter* args, World* world=nullptr) {
-
-    int id = args->geti(-1);
-
-    size_t dataSize = sizeof(UnloadCmdData);
-    UnloadCmdData* cmdData = (UnloadCmdData*) (world ? RTAlloc(world, dataSize) : NRTAlloc(dataSize));
-    if (cmdData == nullptr) {
-      Print("nn_unload: msg data alloc failed.\n");
-      return nullptr;
-    }
-    cmdData->id = id;
-    return cmdData;
-  }
-
-  UnloadCmdData() = delete;
 };
 
-bool nn_unload(World* world, void* inData) {
-  UnloadCmdData* data = (UnloadCmdData*)inData;
-  int id = data->id;
+// /cmd /nn_query str
+struct NNQueryCmd : BaseAsyncCmd<NNQueryCmd> {
 
-  gModels.unload(id);
+  static const char* cmdName() { return "/nn_query"; }
 
-  return true;
-}
+  static bool stage2(World* world, void* inData) {
+    auto cmdData = (NNQueryCmd*) inData;
+    auto args = cmdData->oscArgs;
+    const int modelIdx = args->geti(-1);
+    const char* outFile = args->gets("");
 
-// /cmd /nn_warmup int int
-/* struct WarmupCmdData { */
-/* public: */
-/*   int modelIdx; */
-/*   int methodIdx; */
+    bool writeToFile = strlen(outFile) > 0;
+    if (modelIdx < 0) {
+      if (writeToFile) gModels.dumpAllInfo(outFile); else gModels.printAllInfo();
+      return true;
+    }
+    const auto model = gModels.get(static_cast<unsigned short>(modelIdx), true);
+    if (model) {
+      if (writeToFile) model->dumpInfo(outFile); else model->printInfo();
+    }
+    return true;
+  }
+};
 
-/*   static WarmupCmdData* alloc(sc_msg_iter* args, World* world=nullptr) { */
-/*     int modelIdx = args->geti(-1); */
-/*     int methodIdx = args->geti(-1); */
+// /nn_unload i
+struct NNUnloadCmd : BaseAsyncCmd<NNUnloadCmd> {
+public:
+  static const char* cmdName() { return "/nn_unload"; }
 
-/*     auto dataSize = sizeof(WarmupCmdData); */
-/*     WarmupCmdData* cmdData = (WarmupCmdData*) (world ? RTAlloc(world, dataSize) : NRTAlloc(dataSize)); */
-/*     if (cmdData == nullptr) { Print("nn_warmup: alloc failed.\n"); return nullptr; } */
-/*     cmdData->modelIdx = modelIdx; */
-/*     cmdData->methodIdx = methodIdx; */
-    
-/*     return cmdData; */
-/*   } */
+  static bool stage2(World* world, void* inData) {
+    auto cmdData = (NNUnloadCmd*) inData;
+    auto args = cmdData->oscArgs;
+    int id = args->geti(-1);
+    gModels.unload(id);
+    return true;
+  }
+};
 
-/*   WarmupCmdData() = delete; */
-/* }; */
 
-/* bool nn_warmup(World* world, void* inData) { */
-/*   WarmupCmdData* data = (WarmupCmdData*)inData; */
-/*   int modelIdx = data->modelIdx; */
-/*   int methodIdx = data->methodIdx; */
-/*   if (modelIdx < 0) { */
-/*     Print("nn_warmup: invalid model index %d\n", modelIdx); */
-/*     return true; */
-/*   } */
-/*   const auto model = gModels.get(static_cast<unsigned short>(modelIdx), true); */
-/*   if (model) { */
-/*     if (methodIdx < 0) { */
-/*       // warmup all methods */
-/*       for(auto method: model->m_methods) model->warmup_method(&method); */
-/*     } else { */
-/*       auto method = model->getMethod(methodIdx, true); */
-/*       if (method) model->warmup_method(method); */
-/*     } */
-/*   } */
-/*   return true; */
-/* } */
-void nrtFree(World*, void* data) { NRTFree(data); }
+// // /cmd /nn_warmup int int
+// struct NNWarmupCmd : BaseAsyncCmd<NNUnloadCmd> {
+// public:
+//   static const char* cmdName() { return "/nn_warmup"; }
+//
+//   static bool stage2(World* world, void* inData) {
+//     auto cmdData = (NNWarmupCmd*) inData;
+//     int modelIdx = cmdData->oscArgs->geti(-1);
+//     int methodIdx = cmdData->oscArgs->geti(-1);
+//
+//    if (modelIdx < 0) {
+//       // Print("nn_warmup: invalid model index %d\n", modelIdx);
+//       const char errMsg[256];
+//       sprintf(errMsg, "invalid model index %d", id);
+//       cmdData->SendFailure(errMsg);
+//       return true;
+//    }
+//    const auto model = gModels.get(static_cast<unsigned short>(modelIdx), true);
+//    if (model) {
+//      if (methodIdx < 0) {
+//        // warmup all methods */
+//        for(auto method: model->m_methods) model->warmup_method(&method);
+//      } else {
+//        auto method = model->getMethod(methodIdx, true);
+//        if (method) model->warmup_method(method);
+//      }
+//    }
+//    return true;
+//   }
+// };
 
-template<class CmdData, auto cmdFn>
-void asyncCmd(World* world, void* inUserData, sc_msg_iter* args, void* replyAddr) {
-  const char* cmdName = ""; // used only in /done, we use /sync instead
-  CmdData* data = CmdData::alloc(args, nullptr);
-  if (data == nullptr) return;
-  DoAsynchronousCommand(
-    world, replyAddr, cmdName, data,
-    cmdFn, // stage2 is non real time
-    nullptr, // stage3: RT (completion msg performed if true)
-    nullptr, // stage4: NRT (sends /done if true)
-    nrtFree, 0, 0);
-}
 
 void definePlugInCmds() {
-  DefinePlugInCmd("/nn_load", asyncCmd<LoadCmdData, nn_load>, nullptr);
-  DefinePlugInCmd("/nn_query", asyncCmd<QueryCmdData, nn_query>, nullptr);
-  DefinePlugInCmd("/nn_unload", asyncCmd<UnloadCmdData, nn_unload>, nullptr);
-  /* DefinePlugInCmd("/nn_warmup", asyncCmd<WarmupCmdData, nn_warmup>, nullptr); */
+  NNLoadCmd::define();
+  NNUnloadCmd::define();
+  NNQueryCmd::define();
+  // NNWarmupCmd::define();
 }
 
 } // namespace NN::Cmd

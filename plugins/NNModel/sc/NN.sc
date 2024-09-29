@@ -55,7 +55,7 @@ NN {
 			this.prPutModel(key, model);
 		} {
 			model = NNModel.load(path, id, server, action: { |m|
-			this.prPutModel(key, m);
+				this.prPutModel(key, m);
 				// call action after adding to registry: in case action needs key
 				action.value(m);
 			});
@@ -69,9 +69,24 @@ NN {
 	*describeAll { this.models.do(_.describe) }
 
 	*dumpInfo { |outFile, server(Server.default)|
-		forkIfNeeded {
-			server.sync(bundles:[this.dumpInfoMsg(-1, outFile)])		
-		}
+		server.sendMsg(*this.dumpInfoMsg(-1, outFile))
+	}
+
+	*prIfCmd { |server, cmd, doneFn, failFn|
+
+		var failResponder, doneResponder;
+
+		failResponder = OSCFunc({|msg| 
+			doneResponder.free;
+			failFn.value(msg)
+		}, '/fail', server.addr, argTemplate:[cmd[1]]).oneShot;
+
+		doneResponder = OSCFunc({|msg| 
+			failResponder.free;
+			doneFn.value(msg)
+		}, '/done', server.addr, argTemplate:[cmd[1]]).oneShot;
+
+		server.sendMsg(*cmd);
 	}
 
 	*loadMsg { |id, path, infoFile|

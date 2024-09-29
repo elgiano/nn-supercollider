@@ -390,7 +390,6 @@ void NN::warmupModel(int n_passes=1) {
 
 
 PluginLoad(NNUGens) {
-  // Plugin magic
   ft = inTable;
 
   registerUnit<NN::NNUGen>(ft, "NNUGen", false);
