@@ -20,7 +20,7 @@ bool NNModelDesc::load(const char* path) {
   if (loaded) {
     Print("NNModelDesc: loaded %s\n", path);
   } else {
-    Print("ERROR: NNModelDesc can't load model %s\n", path);
+    Print("ERROR: NNModelDesc backend failed to load model %s\n", path);
     return false;
   }
 
@@ -89,7 +89,7 @@ NNModelDescLib::NNModelDescLib(): models(), modelCount(0) {}
 
 unsigned short NNModelDescLib::getNextId() {
   unsigned short id = modelCount;
-  while(models[id] != nullptr) id++;
+  while (models.find(id) != models.end()) id++;
   return id;
 };
 
@@ -148,7 +148,6 @@ NNModelDesc* NNModelDescLib::load(const char* path) {
 }
 NNModelDesc* NNModelDescLib::load(unsigned short id, const char* path) {
   auto model = get(id, false);
-  /* Print("NNBackend: loading model %s at idx %d\n", path, id); */
   if (model != nullptr) {
     if (strcmp(model->getPath(), path) == 0) {
       Print("NNBackend: model %d already loaded %s\n", id, path);
